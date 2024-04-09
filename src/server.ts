@@ -1,4 +1,3 @@
-require("dotenv").config();
 import express from "express";
 import bodyParser from "body-parser";
 import { MongoClient, ServerApiVersion } from "mongodb";
@@ -8,8 +7,7 @@ import similarity from "compute-cosine-similarity";
 const app = express();
 const port = process.env.PORT || 3000; // Use environment variable for port
 
-const uri =
-  "mongodb+srv://colab:wellitscolab@dcu.32sdeqs.mongodb.net/?retryWrites=true&w=majority";
+const uri = process.env.URI as string;
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -38,7 +36,7 @@ async function connectToDBAndFit() {
 
     const imageDocs = await collection
       .find({})
-      .limit(100)
+      // .limit(1000)
       .toArray();
 
     // Process image documents, fit vectorizer, and populate dictionary

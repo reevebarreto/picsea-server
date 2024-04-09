@@ -5,7 +5,8 @@
   "main": "./dist/server.js",
   "scripts": {
     "build": "tsc --build",
-    "start": "npm run build && node ./dist/server.js"
+    "start": "npm run build && node ./dist/server.js",
+    "pm2:start": "pm2 start npm --name picsea-server -- start"
   },
   "author": "Reeve Barreto",
   "license": "ISC",
