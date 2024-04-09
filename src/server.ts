@@ -9,7 +9,6 @@ const app = express();
 const port = process.env.PORT || 3000; // Use environment variable for port
 
 const uri =
-  process.env.URI ||
   "mongodb+srv://colab:wellitscolab@dcu.32sdeqs.mongodb.net/?retryWrites=true&w=majority";
 
 const client = new MongoClient(uri, {
