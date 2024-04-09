@@ -1,3 +1,4 @@
+require("dotenv").config();
 import express from "express";
 import bodyParser from "body-parser";
 import { MongoClient, ServerApiVersion } from "mongodb";
@@ -38,7 +39,7 @@ async function connectToDBAndFit() {
 
     const imageDocs = await collection
       .find({})
-      // .limit(1000)
+      .limit(100)
       .toArray();
 
     // Process image documents, fit vectorizer, and populate dictionary
