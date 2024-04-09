@@ -1,4 +1,5 @@
 import natural from "natural";
+import * as fs from "fs";
 import { preprocessDocument } from "./utils/preprocessDocument";
 
 export default class TFIDFVectorizer {
@@ -20,7 +21,9 @@ export default class TFIDFVectorizer {
     for (const [id, summaryText] of documents.entries()) {
       const preprocessedText = preprocessDocument(summaryText);
       // Calculate and store summary vector during fit
-      this.summaryVectors[id] = this.tfidf.tfidfs(preprocessedText);
+      this.summaryVectors[id] = this.transform(preprocessedText);
+
+      console.log(`Finished fitting document ${id}`);
     }
   }
 

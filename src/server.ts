@@ -1,5 +1,6 @@
 import express from "express";
 import bodyParser from "body-parser";
+import cors from "cors";
 import { MongoClient, ServerApiVersion } from "mongodb";
 import TFIDFVectorizer from "./tfidf_vectorizer";
 import similarity from "compute-cosine-similarity";
@@ -38,7 +39,7 @@ async function connectToDBAndFit() {
 
     const imageDocs = await collection
       .find({})
-      // .limit(1000)
+      .limit(2000)
       .toArray();
 
     // Process image documents, fit vectorizer, and populate dictionary
@@ -68,6 +69,7 @@ async function connectToDBAndFit() {
 connectToDBAndFit(); // Call the connection function
 
 app.use(bodyParser.json());
+app.use(cors({ origin: "*" }));
 
 app.get("/", (req, res) => {
   res.send("Welcome to the document search engine!");
