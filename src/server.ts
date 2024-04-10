@@ -2,8 +2,9 @@ import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
 import { MongoClient, ServerApiVersion } from "mongodb";
-import TFIDFVectorizer from "./tfidf_vectorizer";
 import similarity from "compute-cosine-similarity";
+import { TfIdfVectorizer } from "./TfIdfVectorizer";
+import { preprocessDocument } from "./utils/preprocessDocument";
 
 const app = express();
 const port = process.env.PORT || 3000; // Use environment variable for port
@@ -11,62 +12,59 @@ const port = process.env.PORT || 3000; // Use environment variable for port
 const uri =
   process.env.URI ||
   "mongodb+srv://colab:wellitscolab@dcu.32sdeqs.mongodb.net/?retryWrites=true&w=majority";
+const databaseName = "MoS";
+const collectionName = "images";
 
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
+let vectorizer: TfIdfVectorizer;
+let summaryVectors: Record<string, number[]> = {};
+let docs: { index: string; summary: string; image_url: string }[] = [];
 
-// Pre-trained TF-IDF vectorizer instance
-const vectorizer = new TFIDFVectorizer();
-
-// Create a dictionary to store image data
-const imageData: {
-  [index: string]: { image_url: string; summary: string };
-} = {};
-
-async function connectToDBAndFit() {
+async function connectToDbAndFitVectorizer() {
   try {
-    await client.connect();
-    console.log("Connected to MongoDB database!");
-
-    // Retrieve images from MongoDB
-    const db = client.db("MoS");
-    const collection = db.collection("images");
+    const client = await MongoClient.connect(uri, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
+    });
+    const db = client.db(databaseName);
+    const collection = db.collection(collectionName);
 
     const imageDocs = await collection
       .find({})
-      .limit(2000)
+      // .limit(1000)
       .toArray();
+    const summaries = imageDocs.map((doc) => doc.summary);
 
-    // Process image documents, fit vectorizer, and populate dictionary
-    for (const imageDoc of imageDocs) {
-      const { index, image_url, summary } = imageDoc;
+    docs = imageDocs.map((doc) => ({
+      index: doc.index,
+      summary: doc.summary,
+      image_url: doc.image_url,
+    }));
 
-      // Store image data in dictionary
-      imageData[index] = { image_url, summary };
+    vectorizer = new TfIdfVectorizer();
+    vectorizer.fit(summaries.map(preprocessDocument));
+
+    summaryVectors = {}; // Clear any existing vectors
+    for (const doc of imageDocs) {
+      const summaryVector = vectorizer.transform(
+        preprocessDocument(doc.summary)
+      );
+      summaryVectors[doc.index] = summaryVector;
+
+      console.log("Fitted ", doc.index, "/", imageDocs.length);
     }
 
-    // Fit the TF-IDF vectorizer with image summaries
-    vectorizer.fit(
-      new Map(
-        Object.entries(imageData).map(([index, data]) => [index, data.summary])
-      )
-    );
-
-    console.log(
-      "Finished fitting TF-IDF vectorizer and populating image data!"
-    );
+    console.log("TF-IDF vectorizer fit and summary vectors pre-computed");
+    client.close();
   } catch (error) {
-    console.error("Error connecting to MongoDB:", error);
-    process.exit(1); // Exit the application on connection failure
+    console.error("Error connecting to database:", error);
+    process.exit(1); // Exit on error
   }
 }
 
-connectToDBAndFit(); // Call the connection function
+connectToDbAndFitVectorizer();
 
 app.use(bodyParser.json());
 app.use(cors({ origin: "*" }));
@@ -82,36 +80,30 @@ app.post("/search", async (req, res) => {
     return res.status(400).json({ error: "Missing 'query' parameter" });
   }
 
-  // Convert the query into a TF-IDF vector
-  const queryVector = vectorizer.transform(query);
+  const preprocessedQuery = preprocessDocument(query); // Implement your preprocessing logic (tokenization, etc.)
 
-  // Calculate cosine similarities
-  const cosineSimilarities: { [id: string]: number } = {};
-  for (const [id, summaryVector] of Object.entries(vectorizer.summaryVectors)) {
-    cosineSimilarities[id] = similarity(queryVector, summaryVector) || 0;
+  // Calculate query vector using the same vectorizer
+  const queryVector = vectorizer.transform(preprocessedQuery);
+
+  // Similarity calculation (replace with your preferred method)
+  const similarityScores: { index: string; score: number }[] = [];
+  for (const [index, summaryVector] of Object.entries(summaryVectors)) {
+    const score = similarity(queryVector, summaryVector) || 0; // Implement your similarity function (e.g., cosine similarity)
+    similarityScores.push({ index, score });
   }
 
-  // Sort documents and their cosine similarities in descending order
-  const sortedResults = Object.entries(cosineSimilarities)
-    .sort((a, b) => b[1] - a[1])
-    .map(([id, score]) => ({ id, score }))
-    .slice(0, 10); // Return top 10 results by default
+  // Sort results by similarity (descending) and select top N
+  const topNSimilar = similarityScores
+    .filter((result) => result.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 100);
 
-  res.json({
-    images: sortedResults.map((result) => {
-      const matchingImage = imageData[result.id];
-      if (matchingImage) {
-        return {
-          index: result.id,
-          image_url: matchingImage.image_url,
-          summary: matchingImage.summary,
-        };
-      } else {
-        console.warn(`Image with ID "${result.id}" not found in imageData`);
-        return null;
-      }
-    }),
+  const topResults = topNSimilar.map((result) => {
+    const matchingDoc = docs.find((doc) => doc.index == result.index);
+    return matchingDoc || {}; // Handle potential missing documents
   });
+
+  res.json(topResults);
 });
 
 app.listen(port, () => {
