@@ -33,12 +33,14 @@ async function connectToDbAndFitVectorizer() {
 
     const imageDocs = await collection
       .find({})
-      // .limit(1000)
+      .limit(10000)
       .toArray();
     const summaries = imageDocs.map((doc) => doc.summary);
 
     docs = imageDocs.map((doc) => ({
       index: doc.index,
+      description: doc.description,
+      annotation: doc.annotation,
       summary: doc.summary,
       image_url: doc.image_url,
     }));
